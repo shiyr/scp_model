@@ -58,8 +58,8 @@ class ProductionData(object):
         self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week): d.quantity for d in self.weekly_demands}
         logger.info("Read %d weekly_demands", len(self.demands))
         
-        self.weekly_yield = optimization_run.weekly_yields
-        self.yields = {(y.site_id, y.week): y.quantity for y in self.weekly_yields}
+        self.weekly_yields = optimization_run.weekly_yields
+        self.yields = {(y.site, y.week): y.quantity for y in self.weekly_yields}
         logger.info("Read %d weekly_yields", len(self.yields))
 
         self.site_capacities = optimization_run.site_capacities
@@ -70,6 +70,7 @@ class ProductionData(object):
         self.fcost = {s.site: s.fcost for s in optimization_run.site_capacities}
         self.ucost = {s.site: s.ucost for s in optimization_run.site_capacities}
         self.ocost = {s.site: s.ocost for s in optimization_run.site_capacities}
+        self.wcost = {s.site: s.wcost for s in optimization_run.site_capacities}
         logger.info("Read %d site_capacities", len(self.site_capacities))
         
         self.prod_inputs = {p: [obj.input for obj in p.inputs] for p in self.products}
