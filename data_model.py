@@ -140,6 +140,7 @@ class SiteCapacity(Base, VersionedMixin):
     fcost = Column(Float, default=0)
     ucost = Column(Float, default=0)
     ocost = Column(Float, default=0)
+    wcost = Column(Float, default=0)
 
     __table_args__ = (versioned_parent_fk('node', ['site_id'], ['id']),)
 
@@ -269,9 +270,9 @@ class WeeklyYield(Base, VersionedMixin):
     week = Column(Integer, primary_key=True, nullable=False)
     quantity = Column(Float, default=0)
 
-    site = relationship("Site", viewonly=True)
+    site = relationship("Node", viewonly=True)
 
-    __table_args__ = (versioned_parent_fk('site', ['site_id'], ['id']),)
+    __table_args__ = (versioned_parent_fk('node', ['site_id'], ['id']),)
 
 
 tables_in_order = [t for t in OptimizationRun.metadata.sorted_tables

@@ -68,15 +68,20 @@ def get_line_variables(model, sites, weeks, prefix):
                           for n in sites
                           for t in weeks})
 
+def get_cap_switch_variables(model, sites, weeks, prefix, lb=0):
+    return Series({(n,t): model.addVar(lb=lb, name=get_name(prefix,n,t))
+                          for n in sites
+                          for t in range(1, max(weeks)+1)})
+
 def get_demand_backlog_variables(model, cust_prod_pairs, weeks, prefix, lb=0):
     return Series({(n,k,t): model.addVar(lb=lb, name=get_name(prefix,n,k,t))
                             for (n,k) in cust_prod_pairs
                             for t in weeks})
 
-def get_quality_hold_variables(model, sites, weeks, prefix, lb=0):
-    return Series({(n,t): model.addVar(lb=lb, name=get_name(prefix,n,t))
-                          for n in sites
-                          for t in weeks})
+def get_quality_hold_variables(model, site_prod_pairs, weeks, prefix, lb=0):
+    return Series({(n,k,t): model.addVar(lb=lb, name=get_name(prefix,n,k,t))
+                  for (n,k) in site_prod_pairs
+                  for t in weeks})
 
 def get_flow_expressions(to_ship, to_receive):
     flow_out = defaultdict(grb.LinExpr)
@@ -93,13 +98,30 @@ def get_production_constraints(model, to_produce, ut, ot, line, pcap, prefix):
                                           name=get_name(prefix,n,t))
                           for (n,t), var in to_produce.iteritems()})
 
+def get_quality_hold_constraints(model, yields, to_produce, q_hold, prefix):
+    # (1 - y[n,t]) * p[n,k,t] = q[n,k,t]
+    return Series({(n,k,t): model.addConstr((1 - yields[n,t]) * var == q_hold[n,k,t],
+                                            name=get_name(prefix,n,k,t))
+                            for (n,k,t), var in to_produce.iteritems()})
+
 def get_ot_ut_constraints(model, produce, line, cap, prefix):
     # ot[n,t] <= OC[n] * l[n,t]
     # ut[n,t] <= UC[n] * l[n,t]
     return Series({(n,t): model.addConstr(var <= cap[n] * line[n,t], name=get_name(prefix,n,t))
                           for (n,t), var in produce.iteritems()})
 
-def get_flow_conservation_constraints(model, start_inv, inv, flow_in, to_produce, flow_out, to_consume, prefix):
+def get_cap_switch_constraints(model, line, switch, prefix):
+    # w[n,t] >= l[n,t] - l[n,t-1]
+    # w[n,t] >= - (l[n,t] - l[n,t-1])
+    pos = {}
+    neg = {}
+    for (n,t), var in switch.iteritems():
+        pos[n,t] = model.addConstr(var >= line[n,t] - line[n,t-1], name=get_name(prefix+'pos',n,t))
+        neg[n,t] = model.addConstr(var >= -(line[n,t] - line[n,t-1]), name=get_name(prefix+'neg',n,t))
+    return Series(pos), Series(neg)
+
+def get_flow_conservation_constraints(model, start_inv, inv, flow_in, to_produce, flow_out,
+                                      to_consume, q_hold, prefix):
     lhs_vars = ['inv', 'flow_in', 'to_produce']
     rhs_vars = ['flow_out', 'to_consume', 'inv']
     constrs = {}
@@ -120,6 +142,10 @@ def get_flow_conservation_constraints(model, start_inv, inv, flow_in, to_produce
                 rhs_expr += eval(rhs_var)[n,k,t]
             except KeyError:
                 pass
+        try:
+            rhs_expr += q_hold[n,k,t]
+        except KeyError:
+            pass
         constrs[n,k,t] = model.addConstr(lhs_expr == rhs_expr, name=get_name(prefix,n,k,t))
     return Series(constrs)
 
@@ -212,6 +238,9 @@ class SCPOptimizer(object):
         self.to_produce = get_production_variables(self.model, self.data.site_prod_produces,
                                                    self.weeks, 'to_produce')
         logger.info("Read %d to_produce variables", len(self.to_produce))
+        self.q_hold = get_quality_hold_variables(self.model, self.data.site_prod_produces,
+                                                 self.weeks, 'q_hold')
+        logger.info("Read %d q_hold variables", len(self.q_hold))
         self.to_ship = get_shipment_variables(self.model, self.data.lanes,
                                               self.weeks, 'to_ship')
         logger.info("Read %d to_ship variables", len(self.to_ship))
@@ -229,9 +258,10 @@ class SCPOptimizer(object):
         logger.info("Read %d ot variables", len(self.ot))
         self.line = get_line_variables(self.model, self.data.sites, self.weeks, 'line')
         logger.info("Read %d line variables", len(self.line))
+        self.switch = get_cap_switch_variables(self.model, self.data.sites, self.weeks, 'switch')
+        logger.info("Read %d switch variables", len(self.switch))
         self.backlog = get_demand_backlog_variables(self.model, self.data.cust_prods, self.weeks, 'backlog')
         logger.info("Read %d backlog variables", len(self.backlog))
-        self.q_hold = get_quality_hold_variables(self.model, self.data,sites, self.weeks, 'q_hold')
         
         self.model_update()
         
@@ -257,14 +287,18 @@ class SCPOptimizer(object):
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
                                                                  self.data.pcap, 'pcap')
+        self.quality_hold_constraints = get_quality_hold_constraints(self.model, self.data.yields,
+                                                                     self.to_produce, self.q_hold, 'qhold')
         self.undertime_constraints = get_ot_ut_constraints(self.model, self.ut, self.line,
                                                            self.data.ucap, 'ucap')
         self.overtime_constraints = get_ot_ut_constraints(self.model, self.ot, self.line,
                                                           self.data.ocap, 'ocap')
+        self.pos_cap_switch_constrs, self.neg_cap_switch_constrs = get_cap_switch_constraints(self.model,
+                                                                   self.line, self.switch, 'switch')
         self.flow_conservation_constraints = get_flow_conservation_constraints(self.model,
-                                                            self.data.start_inv,
-                                                            self.inv, self.flow_in, self.to_produce,
-                                                            self.flow_out, self.to_consume, 'flow_consv')
+                                                            self.data.start_inv, self.inv,
+                                                            self.flow_in, self.to_produce, self.flow_out,
+                                                            self.to_consume, self.q_hold, 'flow_consv')
         self.total_receive_constraints = get_total_receive_constraints(self.model, self.data.start_to_rec,
                                                             self.to_receive, self.ship_to_rec, 'total_rec')
         self.trans_cap_constraints = get_trans_cap_constraints(self.model, self.data.tcap,
@@ -288,13 +322,22 @@ class SCPOptimizer(object):
     
     def optimize_objective(self):
         inv_cost = grb.quicksum(self.data.icost[n,k] * var for (n,k,t), var in self.inv.iteritems())
-        prod_cost = grb.quicksum(self.data.fcost[n] * var for (n,k,t), var in self.to_produce.iteritems()) + \
+        prod_cost = grb.quicksum(self.data.fcost[n] * var for (n,t), var in self.line.iteritems()) + \
                     grb.quicksum(self.data.ucost[n] * var for (n,t), var in self.ut.iteritems()) + \
                     grb.quicksum(self.data.ocost[n] * var for (n,t), var in self.ot.iteritems())
         tran_cost = grb.quicksum(self.data.tcost[i,j,k,m] * var for (i,j,k,m,t), var in self.to_ship.iteritems())
         pen_cost = grb.quicksum(self.data.pcost[n,k] * var for (n,k,t), var in self.backlog.iteritems())
-        obj = inv_cost + prod_cost + tran_cost + pen_cost
+        cap_switch_cost = grb.quicksum(self.data.wcost[n] * var for (n,t), var in self.switch.iteritems())
+        obj = inv_cost + prod_cost + tran_cost + pen_cost + cap_switch_cost
         self.optimize('min_backlog', objs=obj)
+        print 'inv_cost:', sum(self.data.icost[n,k] * var.X for (n,k,t), var in self.inv.iteritems())
+        print 'fixed_cost:', sum(self.data.fcost[n] * var.X for (n,t), var in self.line.iteritems())
+        print 'ut_cost:', sum(self.data.ucost[n] * var.X for (n,t), var in self.ut.iteritems())
+        print 'ot_cost:', sum(self.data.ocost[n] * var.X for (n,t), var in self.ot.iteritems())
+        print 'tran_cost:',sum(self.data.tcost[i,j,k,m] * var.X for (i,j,k,m,t), var in self.to_ship.iteritems())
+        print 'pen_cost:', sum(self.data.pcost[n,k] * var.X for (n,k,t), var in self.backlog.iteritems())
+        print 'cap_switch_cost:', sum(self.data.wcost[n] * var.X for (n,t), var in self.switch.iteritems())
+        print 'obj:', self.model.ObjVal
         # for name, value in zip(self.model.getAttr('VarName', list(self.to_produce)), self.model.getAttr('X', list(self.to_produce))):
         #     print name, value
         self.output_to_excel()
