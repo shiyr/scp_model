@@ -153,8 +153,12 @@ def get_total_receive_constraints(model, start_to_rec, to_receive, ship_to_rec, 
     receive = defaultdict(grb.LinExpr)
     for (i,j,k,m,t,s), var in ship_to_rec.iteritems():
         receive[i,j,k,m,t] += ship_to_rec[i,j,k,m,t,s]
-    return Series({(i,j,k,m,t): model.addConstr(var == receive[i,j,k,m,t] + start_to_rec[i,j,k,m,t],
-                                                name=get_name(prefix,i,j,k,m,t))
+    for (i,j,k,m,t), var in to_receive.iteritems():
+        try:
+            receive[i,j,k,m,t] += start_to_rec[i,j,k,m,t]
+        except KeyError:
+            pass
+    return Series({(i,j,k,m,t): model.addConstr(var == receive[i,j,k,m,t], name=get_name(prefix,i,j,k,m,t))
                                 for (i,j,k,m,t), var in to_receive.iteritems()})
 
 def get_trans_cap_constraints(model, tcap, to_ship, prefix):
