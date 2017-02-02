@@ -12,6 +12,7 @@ class ProductionData(object):
     def __init__(self, optimization_run):
         self.optimization_run = optimization_run
         self.num_weeks = self.optimization_run.num_weeks
+        self.yield_states = self.optimization_run.yield_states
         self.parameters = {p.name: p.value for p in self.optimization_run.parameters}
         self.optimization_run.log_parameters()
         logger.info("Read parameters table")
@@ -55,12 +56,23 @@ class ProductionData(object):
         logger.info("Read %d cust_prods", len(self.cust_prods))
 
         self.weekly_demands = optimization_run.weekly_demands
-        self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week): d.quantity for d in self.weekly_demands}
+        self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week, d.sample_id): d.quantity
+                        for d in self.weekly_demands}
         logger.info("Read %d weekly_demands", len(self.demands))
         
         self.weekly_yields = optimization_run.weekly_yields
-        self.yields = {(y.site, y.week): y.quantity for y in self.weekly_yields}
+        self.yields = {(y.site, y.week, y.sample_id): y.quantity for y in self.weekly_yields}
         logger.info("Read %d weekly_yields", len(self.yields))
+        self.p_yield = {p.state: p.prob for p in optimization_run.yield_probs}
+        logger.info("Read %d p_yield", len(self.p_yield))
+
+        self.tree = optimization_run.scenario_trees
+        self.weekly_states = [(t.week, t.state) for t in self.tree]
+        logger.info("Read %d weekly_states", len(self.weekly_states))
+        self.pres = {(t.week, t.state): t.predecessor for t in self.tree}
+        self.sucs = {(t.week, t.state): [int(s) for s in str(t.successor).split(',')] for t in self.tree}
+        self.p_demand = {p.state: p.prob for p in optimization_run.demand_probs}
+        logger.info("Read %d p_demand", len(self.p_demand))
 
         self.site_capacities = optimization_run.site_capacities
         self.pcap = {s.site: s.pcap for s in optimization_run.site_capacities}
@@ -91,3 +103,8 @@ class ProductionData(object):
         print self.sites_store_prod
         print self.pcost
         print self.fcost
+        print self.weekly_states
+        print self.pres
+        print self.sucs
+        print self.p_yield
+        print self.p_demand

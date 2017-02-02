@@ -62,6 +62,10 @@ class OptimizationRun(Base):
     @lazy_property
     def num_weeks(self):
         return max(d.week for d in self.weekly_demands) + 1
+    
+    @lazy_property
+    def yield_states(self):
+        return max(y.sample_id for y in self.weekly_yields) + 1
 
     def log_parameters(self):
         logger.info("optimization run parameters")
@@ -273,6 +277,23 @@ class WeeklyYield(Base, VersionedMixin):
     site = relationship("Node", viewonly=True)
 
     __table_args__ = (versioned_parent_fk('node', ['site_id'], ['id']),)
+
+
+class ScenarioTree(Base, VersionedMixin):
+    week = Column(Integer, primary_key=True, nullable=False)
+    state = Column(Integer, primary_key=True, nullable=False)
+    predecessor = Column(Integer)
+    successor = Column(String(255))
+
+
+class DemandProb(Base, VersionedMixin):
+    state = Column(Integer, primary_key=True, nullable=False)
+    prob = Column(Float, nullable=False)
+
+
+class YieldProb(Base, VersionedMixin):
+    state = Column(Integer, primary_key=True, nullable=False)
+    prob = Column(Float, nullable=False)
 
 
 tables_in_order = [t for t in OptimizationRun.metadata.sorted_tables
