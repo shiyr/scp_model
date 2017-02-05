@@ -67,7 +67,7 @@ def get_production_time_variables(model, sites, weekly_states, prefix, lb=0):
                             for (t,w) in weekly_states})
 
 def get_line_variables(model, sites, lcap, weeks, prefix, lb=0):
-    return Series({(n,t): model.addVar(ub=int(lcap[n]), lb=lb, vtype=GRB.INTEGER, name=get_name(prefix,n,t))
+    return Series({(n,t): model.addVar(ub=int(lcap[n]), lb=lb, name=get_name(prefix,n,t))
                           for n in sites
                           for t in weeks})
 
@@ -309,20 +309,17 @@ class SCPOptimizer(object):
         
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
         
-        for (n,t), var in self.line.iteritems():
-            if n.type == 'supplier':
-                # fix_var(var, 1)
-                var.UB = 1
-            # elif t > 0 and t < (self.data.num_weeks - 1):
-            #     var.LB = 1
-        
         # for (n,t), var in self.line.iteritems():
         #     if n.type == 'supplier':
-        #         fix_var(var, 1)
-        #     elif t == 0:
-        #         fix_var(var, 0)
-        #     else:
-        #         fix_var(var, 1)
+        #         var.UB = 1
+        
+        for (n,t), var in self.line.iteritems():
+            if n.type == 'supplier':
+                fix_var(var, 1)
+            elif t == 0:
+                fix_var(var, 0)
+            else:
+                fix_var(var, self.data.lcap[n])
         
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
@@ -416,7 +413,7 @@ class SCPOptimizer(object):
             self.model.setParam('MIPGap', mipgap)
             if self.get_global_parameter('plateau_stopping_flag', True):
                 logger.info("using node based mip stopping criteria")
-                callback = StoppingCriteria(np.ceil(time_limit / 10.0),
+                callback = StoppingCriteria(np.ceil(time_limit / 1.0),
                                             gap_to_plateau = 0.1,
                                             nodes_per_second = 10)
                 callback = object_to_callback(callback)
