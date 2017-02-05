@@ -66,8 +66,8 @@ def get_production_time_variables(model, sites, weekly_states, prefix, lb=0):
                             for n in sites
                             for (t,w) in weekly_states})
 
-def get_line_variables(model, sites, weeks, prefix):
-    return Series({(n,t): model.addVar(ub=5.0, vtype=GRB.INTEGER, name=get_name(prefix,n,t))
+def get_line_variables(model, sites, lcap, weeks, prefix, lb=0):
+    return Series({(n,t): model.addVar(ub=int(lcap[n]), lb=lb, vtype=GRB.INTEGER, name=get_name(prefix,n,t))
                           for n in sites
                           for t in weeks})
 
@@ -228,7 +228,7 @@ class SCPOptimizer(object):
                     grb.gurobi.version(), grb.gurobi.platform())
         self.model = grb.Model()
         logger.info("created gurobi model")
-    
+
         self.model.setParam('Method', 3)
         # -1=automatic, 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent
         # Automatic will typically choose non-deterministic concurrent (Method=3) for LP, barrier (Method=2) for QP or QCP, and dual (Method=1) for MIP root node.
@@ -236,7 +236,7 @@ class SCPOptimizer(object):
         # Only primal and dual simplex are available for solving the root of an MIQP mpde.
         # Only barrier is available for continuous QCP models.
         # Concurrent (Method=3) run multiple solvers on multiple threads simultaneously, and choose the one that finishes first. Method=3 is often faster than Method=4 but can produce different optimal bases.
-        self.model.setParam('InfUnbdInfo', 1)
+        self.model.setParam('InfUnbdInfo', 0)
         # Determines whether simplex (and crossover) will compute additional information when a model is determined to be infeasible or unbounded.
         # Set to 1 if you want to query the unbounded ray for unbounded models, or the infeasibility proof for infeasible models.
         # This parameter applies to LP only.
@@ -286,7 +286,7 @@ class SCPOptimizer(object):
         logger.info("Read %d ut variables", len(self.ut))
         self.ot = get_production_time_variables(self.model, self.data.sites, self.weekly_states, 'ot')
         logger.info("Read %d ot variables", len(self.ot))
-        self.line = get_line_variables(self.model, self.data.sites, self.weeks, 'line')
+        self.line = get_line_variables(self.model, self.data.sites, self.data.lcap, self.weeks, 'line')
         logger.info("Read %d line variables", len(self.line))
         self.switch = get_cap_switch_variables(self.model, self.data.sites, self.weeks, 'switch')
         logger.info("Read %d switch variables", len(self.switch))
@@ -301,11 +301,12 @@ class SCPOptimizer(object):
                                                    for n in self.data.sites
                                                    for (t,w) in self.weekly_states})
         
-        self.to_consume = Series({(n,p,t,w): grb.quicksum(self.to_produce[n,g.output,t,w] for g in p.outputs)
+        self.to_consume = Series({(n,p,t,w): grb.quicksum(self.to_produce[n,g.output,t,w]
+                                             for g in p.outputs if (n,g.output) in self.data.site_prod_produces)
                                              for p in self.data.products if p.type == 'part'
                                              for n in self.data.nodes if n.type == 'manufacturer'
                                              for (t,w) in self.weekly_states})
-                                           
+        
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
         
         for (n,t), var in self.line.iteritems():
@@ -314,6 +315,14 @@ class SCPOptimizer(object):
                 var.UB = 1
             # elif t > 0 and t < (self.data.num_weeks - 1):
             #     var.LB = 1
+        
+        # for (n,t), var in self.line.iteritems():
+        #     if n.type == 'supplier':
+        #         fix_var(var, 1)
+        #     elif t == 0:
+        #         fix_var(var, 0)
+        #     else:
+        #         fix_var(var, 1)
         
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
@@ -424,8 +433,8 @@ class SCPOptimizer(object):
 
         logger.info("optimizing objective %s with a time limit of %d seconds", name, time_limit)
         if self.get_global_parameter('no_crossover_flag', False):
-            self.model.setParam('Crossover', 0)
             self.model.setParam('Method', 2)
+            self.model.setParam('Crossover', 0)
 
         self.model.optimize(callback)
         logger.info("gurobi returned with status %s and reported runtime of %.4f seconds",
@@ -438,10 +447,10 @@ class SCPOptimizer(object):
         if self.has_feasible_solution:
             elements = (name, self.model.ObjVal, status_name(self.model))
             logger.info("objective value for %s = %10.2f, status = %s", *elements)
-            if not self.model.isMIP:
-                self.log_nonzero_duals(name)
-                self.save_fairshare_lb_duals(name)
-                self.save_objective_constraint_duals(name)
+            # if not self.model.isMIP:
+            #     self.log_nonzero_duals(name)
+            #     self.save_fairshare_lb_duals(name)
+            #     self.save_objective_constraint_duals(name)
         else:
             logger.critical("optimizer %s did not find a feasible solution! status = %s",
                             name, status_name(self.model))

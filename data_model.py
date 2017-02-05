@@ -140,6 +140,7 @@ class SiteCapacity(Base, VersionedMixin):
     pcap = Column(Float, default=0)
     ucap = Column(Float, default=0)
     ocap = Column(Float, default=0)
+    lcap = Column(Integer, default=0)
     icap = Column(Float, default=0)
     fcost = Column(Float, default=0)
     ucost = Column(Float, default=0)

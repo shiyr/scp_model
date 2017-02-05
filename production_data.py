@@ -78,6 +78,7 @@ class ProductionData(object):
         self.pcap = {s.site: s.pcap for s in optimization_run.site_capacities}
         self.ucap = {s.site: s.ucap for s in optimization_run.site_capacities}
         self.ocap = {s.site: s.ocap for s in optimization_run.site_capacities}
+        self.lcap = {s.site: s.lcap for s in optimization_run.site_capacities}
         self.icap = {s.site: s.icap for s in optimization_run.site_capacities}
         self.fcost = {s.site: s.fcost for s in optimization_run.site_capacities}
         self.ucost = {s.site: s.ucost for s in optimization_run.site_capacities}
@@ -91,20 +92,3 @@ class ProductionData(object):
         self.inv_at_site = {n: [map.prod for map in n.stored_prods] for n in self.nodes}
         self.sites_produce_prod = {k: [map.site for map in k.produced_in_sites] for k in self.products}
         self.sites_store_prod = {k: [map.site for map in k.stored_in_sites] for k in self.products}
-        
-        
-        print self.products
-        print self.nodes
-        print self.prod_inputs
-        print self.prod_outputs
-        print self.produced_at_site
-        print self.inv_at_site
-        print self.sites_produce_prod
-        print self.sites_store_prod
-        print self.pcost
-        print self.fcost
-        print self.weekly_states
-        print self.pres
-        print self.sucs
-        print self.p_yield
-        print self.p_demand
