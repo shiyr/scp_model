@@ -1,7 +1,8 @@
+from __future__ import division
 from collections import defaultdict
 from operator import attrgetter
+import numpy as np
 from pandas import Series, DataFrame
-from numpy import unique
 import logging
 
 logging.basicConfig(level=logging.INFO, format="%(relativeCreated)5d:%(levelname)-5s:%(name)-8s:%(message)s")
@@ -10,12 +11,13 @@ logger = logging.getLogger("production_data")
 
 class ProductionData(object):
     def __init__(self, optimization_run):
-        self.optimization_run = optimization_run
-        self.num_weeks = self.optimization_run.num_weeks
-        self.yield_states = self.optimization_run.yield_states
-        self.parameters = {p.name: p.value for p in self.optimization_run.parameters}
-        self.optimization_run.log_parameters()
+        self.num_weeks = optimization_run.num_weeks
+        # self.yield_states = optimization_run.yield_states
+        self.parameters = {name: p.value for name, p in optimization_run.parameters.iteritems()}
+        optimization_run.log_parameters()
         logger.info("Read parameters table")
+        self.s1_weeks = self.parameters.get('stage_1_size', 1)
+        self.sample_size = self.parameters.get('sample_size', 100)
 
         self.products = optimization_run.products
         logger.info("Read %d products", len(self.products))
@@ -41,7 +43,7 @@ class ProductionData(object):
         logger.info("Read %d weekly_receives", len(self.start_to_rec))
 
         self.site_prod_produces = [(map.site, map.prod) for map in optimization_run.site_prod_produces]
-        self.sites = list(unique([map.site for map in optimization_run.site_prod_produces]))
+        self.sites = list(np.unique([map.site for map in optimization_run.site_prod_produces]))
         logger.info("Read %d site_prod_produces", len(self.site_prod_produces))
 
         self.site_prod_invs = [(map.site, map.prod) for map in optimization_run.site_prod_invs]
@@ -50,29 +52,21 @@ class ProductionData(object):
         logger.info("Read %d site_prod_invs", len(self.site_prod_invs))
 
         self.cust_prods = [(map.cust, map.prod) for map in optimization_run.cust_prods]
-        self.customers = list(unique([map.cust for map in optimization_run.cust_prods]))
+        self.customers = list(np.unique([map.cust for map in optimization_run.cust_prods]))
         self.start_backlog = {(map.cust, map.prod): map.start_backlog for map in optimization_run.cust_prods}
         self.pcost = {(map.cust, map.prod): map.pcost for map in optimization_run.cust_prods}
         logger.info("Read %d cust_prods", len(self.cust_prods))
 
-        self.weekly_demands = optimization_run.weekly_demands
-        self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week, d.sample_id): d.quantity
-                        for d in self.weekly_demands}
+        self.demands = self.get_random_demands(optimization_run.weekly_demands, self.sample_size)
         logger.info("Read %d weekly_demands", len(self.demands))
-        
-        self.weekly_yields = optimization_run.weekly_yields
-        self.yields = {(y.site, y.week, y.sample_id): y.quantity for y in self.weekly_yields}
+        self.yields = self.get_random_yields(self.sites, self.num_weeks, self.s1_weeks, self.sample_size)
         logger.info("Read %d weekly_yields", len(self.yields))
-        self.p_yield = {p.state: p.prob for p in optimization_run.yield_probs}
-        logger.info("Read %d p_yield", len(self.p_yield))
 
-        self.tree = optimization_run.scenario_trees
-        self.weekly_states = [(t.week, t.state) for t in self.tree]
+        self.weekly_states = self.get_weekly_states(self.num_weeks, self.s1_weeks, self.sample_size)
+        self.pres, self.sucs = self.get_pres_and_sucs(self.weekly_states, self.s1_weeks, self.sample_size)
         logger.info("Read %d weekly_states", len(self.weekly_states))
-        self.pres = {(t.week, t.state): t.predecessor for t in self.tree}
-        self.sucs = {(t.week, t.state): [int(s) for s in str(t.successor).split(',')] for t in self.tree}
-        self.p_demand = {p.state: p.prob for p in optimization_run.demand_probs}
-        logger.info("Read %d p_demand", len(self.p_demand))
+        self.p_state = self.get_state_probabilities(self.weekly_states, self.sample_size)
+        logger.info("Read %d p_state", len(self.p_state))
 
         self.site_capacities = optimization_run.site_capacities
         self.pcap = {s.site: s.pcap for s in optimization_run.site_capacities}
@@ -92,3 +86,62 @@ class ProductionData(object):
         self.inv_at_site = {n: [map.prod for map in n.stored_prods] for n in self.nodes}
         self.sites_produce_prod = {k: [map.site for map in k.produced_in_sites] for k in self.products}
         self.sites_store_prod = {k: [map.site for map in k.stored_in_sites] for k in self.products}
+
+    def get_random_demands(self, weekly_demands, size=100):
+        demands = {}
+        ref_demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week, d.sample_id): d.quantity
+                       for d in weekly_demands}
+        for (n,k,t,w), val in ref_demands.iteritems():
+            demands[n,k,t,w] = val
+            if w == 1:
+                new_demands = np.random.normal(val, 0.1*val, size-1)
+                for i in range(2, size+1):
+                    demands[n,k,t,i] = new_demands[i-2]
+        return demands
+
+    def get_random_yields(self, sites, num_weeks, s1_weeks, size=100):
+        yields = {}
+        for n in sites:
+            for t in range(num_weeks):
+                if t < s1_weeks:
+                    yields[n,t,0] = np.random.uniform(0.9,1)
+                else:
+                    for w in range(1, size+1):
+                        yields[n,t,w] = np.random.uniform(0.9,1)
+        return yields
+
+    def get_weekly_states(self, num_weeks, s1_weeks, size=100):
+        weekly_states = []
+        for t in range(num_weeks):
+            if t < s1_weeks:
+                weekly_states.append((t,0))
+            else:
+                for w in range(1, size+1):
+                    weekly_states.append((t,w))
+        return weekly_states
+    
+    def get_state_probabilities(self, weekly_states, size=100):
+        p_state = defaultdict(float)
+        for (t,w) in weekly_states:
+            if w == 0:
+                p_state[t,w] = 1
+            else:
+                p_state[t,w] = 1/size
+        return p_state
+
+    def get_pres_and_sucs(self, weekly_states, s1_weeks, size=100):
+        pres = {}
+        sucs = {}
+        for (t,w) in weekly_states:
+            if t <= s1_weeks:
+                pres[t,w] = 0
+            else:
+                pres[t,w] = w
+        for (t,w) in weekly_states:
+            if t < s1_weeks - 1:
+                sucs[t,w] = [0]
+            elif t == s1_weeks - 1:
+                sucs[t,w] = range(1, size+1)
+            else:
+                sucs[t,w] = [w]
+        return pres, sucs

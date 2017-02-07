@@ -36,30 +36,27 @@ def fix_var(dvar, x):
 
 def get_production_variables(model, site_prod_pairs, weekly_states, prefix, lb=0):
     return Series({(n,k,t,w): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w))
-                            for (n,k) in site_prod_pairs
-                            for (t,w) in weekly_states})
+                              for (n,k) in site_prod_pairs
+                              for (t,w) in weekly_states})
 
-def get_shipment_variables(model, lanes, weekly_states, yield_states, prefix, lb=0):
-    return Series({(i,j,k,m,t,w,v): model.addVar(lb=lb, name=get_name(prefix,i,j,k,m,t,w,v))
-                                for (i,j,k,m) in lanes
-                                for (t,w) in weekly_states
-                                for v in yield_states})
+def get_shipment_variables(model, lanes, weekly_states, prefix, lb=0):
+    return Series({(i,j,k,m,t,w): model.addVar(lb=lb, name=get_name(prefix,i,j,k,m,t,w))
+                                  for (i,j,k,m) in lanes
+                                  for (t,w) in weekly_states})
 
-def get_ship_to_receive_variables(model, lanes, weekly_states, yield_states, lt, prefix, lb=0):
+def get_ship_to_receive_variables(model, lanes, weekly_states, lt, prefix, lb=0):
     vars = {}
     for (i,j,k,m) in lanes:
         for (t,w) in weekly_states:
-            for v in yield_states:
-                s = t - lt[i,j,m]
-                if s >= 0:
-                    vars[i,j,k,m,t,s,w,v] = model.addVar(lb=lb, name=get_name(prefix,i,j,k,m,t,s,w,v))
+            s = t - lt[i,j,m]
+            if s >= 0:
+                vars[i,j,k,m,t,s,w] = model.addVar(lb=lb, name=get_name(prefix,i,j,k,m,t,s,w))
     return Series(vars)
 
-def get_inventory_variables(model, site_prod_pairs, weekly_states, yield_states, prefix, lb=0):
-    return Series({(n,k,t,w,v): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w,v))
-                                for (n,k) in site_prod_pairs
-                                for (t,w) in weekly_states
-                                for v in yield_states})
+def get_inventory_variables(model, site_prod_pairs, weekly_states, prefix, lb=0):
+    return Series({(n,k,t,w): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w))
+                              for (n,k) in site_prod_pairs
+                              for (t,w) in weekly_states})
 
 def get_production_time_variables(model, sites, weekly_states, prefix, lb=0):
     return Series({(n,t,w): model.addVar(lb=lb, name=get_name(prefix,n,t,w))
@@ -76,24 +73,22 @@ def get_cap_switch_variables(model, sites, weeks, prefix, lb=0):
                           for n in sites
                           for t in range(1, max(weeks)+1)})
 
-def get_demand_backlog_variables(model, cust_prod_pairs, weekly_states, yield_states, prefix, lb=0):
-    return Series({(n,k,t,w,v): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w,v))
-                                for (n,k) in cust_prod_pairs
-                                for (t,w) in weekly_states
-                                for v in yield_states})
+def get_demand_backlog_variables(model, cust_prod_pairs, weekly_states, prefix, lb=0):
+    return Series({(n,k,t,w): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w))
+                              for (n,k) in cust_prod_pairs
+                              for (t,w) in weekly_states})
 
-def get_quality_hold_variables(model, site_prod_pairs, weekly_states, yield_states, prefix, lb=0):
-    return Series({(n,k,t,w,v): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w,v))
-                                for (n,k) in site_prod_pairs
-                                for (t,w) in weekly_states
-                                for v in yield_states})
+def get_quality_hold_variables(model, site_prod_pairs, weekly_states, prefix, lb=0):
+    return Series({(n,k,t,w): model.addVar(lb=lb, name=get_name(prefix,n,k,t,w))
+                              for (n,k) in site_prod_pairs
+                              for (t,w) in weekly_states})
 
 def get_flow_expressions(to_ship, to_receive):
     flow_out = defaultdict(grb.LinExpr)
     flow_in = defaultdict(grb.LinExpr)
-    for (i,j,k,m,t,w,v) in to_ship.keys():
-        flow_out[i,k,t,w,v] += to_ship[i,j,k,m,t,w,v]
-        flow_in[j,k,t,w,v] += to_receive[i,j,k,m,t,w,v]
+    for (i,j,k,m,t,w) in to_ship.keys():
+        flow_out[i,k,t,w] += to_ship[i,j,k,m,t,w]
+        flow_in[j,k,t,w] += to_receive[i,j,k,m,t,w]
     return Series(flow_out), Series(flow_in)
 
 
@@ -103,12 +98,11 @@ def get_production_constraints(model, to_produce, ut, ot, line, pcap, prefix):
                                             name=get_name(prefix,n,t,w))
                             for (n,t,w), var in to_produce.iteritems()})
 
-def get_quality_hold_constraints(model, yields, yield_states, to_produce, q_hold, prefix):
+def get_quality_hold_constraints(model, yields, to_produce, q_hold, prefix):
     # (1 - y[n,t]) * p[n,k,t] = q[n,k,t]
-    return Series({(n,k,t,w,v): model.addConstr((1 - yields[n,t,v]) * var == q_hold[n,k,t,w,v],
-                                                name=get_name(prefix,n,k,t,w,v))
-                                for (n,k,t,w), var in to_produce.iteritems()
-                                for v in yield_states})
+    return Series({(n,k,t,w): model.addConstr((1 - yields[n,t,w]) * var == q_hold[n,k,t,w],
+                                              name=get_name(prefix,n,k,t,w))
+                              for (n,k,t,w), var in to_produce.iteritems()})
 
 def get_ot_ut_constraints(model, produce, line, cap, prefix):
     # ot[n,t] <= OC[n] * l[n,t]
@@ -131,7 +125,7 @@ def get_flow_conservation_constraints(model, start_inv, pres, inv, flow_in, to_p
     lhs_vars = ['inv', 'flow_in', 'to_produce']
     rhs_vars = ['flow_out', 'to_consume', 'inv']
     constrs = {}
-    for (n,k,t,w,v) in inv.keys():
+    for (n,k,t,w) in inv.keys():
         lhs_expr = grb.LinExpr()
         rhs_expr = grb.LinExpr()
         for (lhs_var, rhs_var) in zip(lhs_vars, rhs_vars):
@@ -139,57 +133,52 @@ def get_flow_conservation_constraints(model, start_inv, pres, inv, flow_in, to_p
                 if t == 0 and lhs_var == 'inv':
                     lhs_expr += start_inv[n,k]
                 elif lhs_var == 'inv':
-                    lhs_expr += eval(lhs_var)[n,k,t-1,pres[t,w],v]
-                elif lhs_var == 'flow_in':
-                    lhs_expr += eval(lhs_var)[n,k,t,w,v]
+                    lhs_expr += eval(lhs_var)[n,k,t-1,pres[t,w]]
                 else:
                     lhs_expr += eval(lhs_var)[n,k,t,w]
             except KeyError:
                 pass
             try:
-                if rhs_var == 'to_consume':
-                    rhs_expr += eval(rhs_var)[n,k,t,w]
-                else:
-                    rhs_expr += eval(rhs_var)[n,k,t,w,v]
+                rhs_expr += eval(rhs_var)[n,k,t,w]
             except KeyError:
                 pass
         try:
-            rhs_expr += q_hold[n,k,t,w,v]
+            rhs_expr += q_hold[n,k,t,w]
         except KeyError:
             pass
-        constrs[n,k,t,w,v] = model.addConstr(lhs_expr == rhs_expr, name=get_name(prefix,n,k,t,w,v))
+        constrs[n,k,t,w] = model.addConstr(lhs_expr == rhs_expr, name=get_name(prefix,n,k,t,w))
     return Series(constrs)
 
 def get_total_receive_constraints(model, start_to_rec, to_receive, ship_to_rec, prefix):
     receive = defaultdict(grb.LinExpr)
-    for (i,j,k,m,t,s,w,v), var in ship_to_rec.iteritems():
-        receive[i,j,k,m,t,w,v] += ship_to_rec[i,j,k,m,t,s,w,v]
-    for (i,j,k,m,t,w,v), var in to_receive.iteritems():
+    for (i,j,k,m,t,s,w), var in ship_to_rec.iteritems():
+        receive[i,j,k,m,t,w] += ship_to_rec[i,j,k,m,t,s,w]
+    for (i,j,k,m,t,w), var in to_receive.iteritems():
         try:
-            receive[i,j,k,m,t,w,v] += start_to_rec[i,j,k,m,t]
+            receive[i,j,k,m,t,w] += start_to_rec[i,j,k,m,t]
         except KeyError:
             pass
-    return Series({(i,j,k,m,t,w,v): model.addConstr(var == receive[i,j,k,m,t,w,v],
-                                                    name=get_name(prefix,i,j,k,m,t,w,v))
-                                    for (i,j,k,m,t,w,v), var in to_receive.iteritems()})
+    return Series({(i,j,k,m,t,w): model.addConstr(var == receive[i,j,k,m,t,w],
+                                                  name=get_name(prefix,i,j,k,m,t,w))
+                                  for (i,j,k,m,t,w), var in to_receive.iteritems()})
 
 def get_trans_cap_constraints(model, tcap, to_ship, prefix):
     ship = defaultdict(grb.LinExpr)
-    for (i,j,k,m,t,w,v) in to_ship.keys():
-        ship[i,j,m,t,w,v] += to_ship[i,j,k,m,t,w,v]
-    return Series({(i,j,m,t,w,v): model.addConstr(var <= tcap[i,j,m], name=get_name(prefix,i,j,m,t,w,v))
-                                  for (i,j,m,t,w,v), var in ship.iteritems()})
+    for (i,j,k,m,t,w) in to_ship.keys():
+        ship[i,j,m,t,w] += to_ship[i,j,k,m,t,w]
+    return Series({(i,j,m,t,w): model.addConstr(var <= tcap[i,j,m], name=get_name(prefix,i,j,m,t,w))
+                                for (i,j,m,t,w), var in ship.iteritems()})
 
 def get_inv_cap_constraints(model, icap, inv, prefix):
     total_inv = defaultdict(grb.LinExpr)
-    for (n,k,t,w,v) in inv.keys():
-        total_inv[n,t,w,v] += inv[n,k,t,w,v]
-    return Series({(n,t,w,v): model.addConstr(var <= icap[n], name=get_name(prefix,n,t,w,v))
-                          for (n,t,w,v), var in total_inv.iteritems()})
+    for (n,k,t,w) in inv.keys():
+        total_inv[n,t,w] += inv[n,k,t,w]
+    return Series({(n,t,w): model.addConstr(var <= icap[n], name=get_name(prefix,n,t,w))
+                            for (n,t,w), var in total_inv.iteritems()})
 
 def get_ship_to_rec_constraints(model, weeks, lt, sucs, to_ship, ship_to_rec, prefix):
     constrs = {}
-    for (i,j,k,m,s,w,v), var in to_ship.iteritems():
+    for (i,j,k,m,s,w), var in to_ship.iteritems():
         t = s + lt[i,j,m]
         if t <= max(weeks):
             suc_list = [w]
@@ -199,21 +188,21 @@ def get_ship_to_rec_constraints(model, weeks, lt, sucs, to_ship, ship_to_rec, pr
                     l += sucs[s+p,q]
                 suc_list = l
             for w2 in suc_list:
-                constrs[i,j,k,m,s,w,w2,v] = model.addConstr(var == ship_to_rec[i,j,k,m,t,s,w2,v],
-                                                            name=get_name(prefix,i,j,k,m,s,w,w2,v))
+                constrs[i,j,k,m,s,w,w2] = model.addConstr(var == ship_to_rec[i,j,k,m,t,s,w2],
+                                                          name=get_name(prefix,i,j,k,m,s,w,w2))
     return Series(constrs)
 
 def get_demand_constraints(model, demand, start_backlog, pres, flow_in, backlog, prefix):
     constrs = {}
-    for (n,k,t,w,v), var in backlog.iteritems():
+    for (n,k,t,w), var in backlog.iteritems():
         if t == 0:
-            constrs[n,k,t,w,v] = model.addConstr(
-                                 flow_in[n,k,t,w,v] + var == demand[n,k,t,w] + start_backlog[n,k],
-                                 name=get_name(prefix,n,k,t,w,v))
+            constrs[n,k,t,w] = model.addConstr(
+                                    flow_in[n,k,t,w] + var == demand[n,k,t,w] + start_backlog[n,k],
+                                    name=get_name(prefix,n,k,t,w))
         else:
-            constrs[n,k,t,w,v] = model.addConstr(
-                                 flow_in[n,k,t,w,v] + var == demand[n,k,t,w] + backlog[n,k,t-1,pres[t,w],v],
-                                 name=get_name(prefix,n,k,t,w,v))
+            constrs[n,k,t,w] = model.addConstr(
+                                    flow_in[n,k,t,w] + var == demand[n,k,t,w] + backlog[n,k,t-1,pres[t,w]],
+                                    name=get_name(prefix,n,k,t,w))
     return Series(constrs)
 
 
@@ -222,14 +211,14 @@ class SCPOptimizer(object):
     def __init__(self, data):
         self.data = data
         self.weeks = range(self.data.num_weeks)
-        self.yield_states = range(self.data.yield_states)
         self.weekly_states = self.data.weekly_states
+        self.sample_size = self.data.sample_size
         logger.info("creating gurobi model object, local gurobi version=%s local platform=%s",
                     grb.gurobi.version(), grb.gurobi.platform())
         self.model = grb.Model()
         logger.info("created gurobi model")
 
-        self.model.setParam('Method', 3)
+        self.model.setParam('Method', 1)
         # -1=automatic, 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent
         # Automatic will typically choose non-deterministic concurrent (Method=3) for LP, barrier (Method=2) for QP or QCP, and dual (Method=1) for MIP root node.
         # Only simplex and barrier algorithms are available for continuous QP models.
@@ -267,20 +256,18 @@ class SCPOptimizer(object):
                                                    self.weekly_states, 'to_produce')
         logger.info("Read %d to_produce variables", len(self.to_produce))
         self.q_hold = get_quality_hold_variables(self.model, self.data.site_prod_produces,
-                                                 self.weekly_states, self.yield_states, 'q_hold')
+                                                 self.weekly_states, 'q_hold')
         logger.info("Read %d q_hold variables", len(self.q_hold))
         self.to_ship = get_shipment_variables(self.model, self.data.lanes,
-                                              self.weekly_states, self.yield_states, 'to_ship')
+                                              self.weekly_states, 'to_ship')
         logger.info("Read %d to_ship variables", len(self.to_ship))
-        self.ship_to_rec = get_ship_to_receive_variables(self.model, self.data.lanes,
-                                                         self.weekly_states, self.yield_states,
+        self.ship_to_rec = get_ship_to_receive_variables(self.model, self.data.lanes, self.weekly_states,
                                                          self.data.lead_times, 'ship_to_rec')
         logger.info("Read %d ship_to_rec variables", len(self.ship_to_rec))
         self.to_receive = get_shipment_variables(self.model, self.data.lanes,
-                                                 self.weekly_states, self.yield_states, 'to_rec')
+                                                 self.weekly_states, 'to_rec')
         logger.info("Read %d to_receive variables", len(self.to_receive))
-        self.inv = get_inventory_variables(self.model, self.data.site_prod_invs, self.weekly_states,
-                                           self.yield_states, 'inv')
+        self.inv = get_inventory_variables(self.model, self.data.site_prod_invs, self.weekly_states, 'inv')
         logger.info("Read %d inv variables", len(self.inv))
         self.ut = get_production_time_variables(self.model, self.data.sites, self.weekly_states, 'ut')
         logger.info("Read %d ut variables", len(self.ut))
@@ -290,8 +277,8 @@ class SCPOptimizer(object):
         logger.info("Read %d line variables", len(self.line))
         self.switch = get_cap_switch_variables(self.model, self.data.sites, self.weeks, 'switch')
         logger.info("Read %d switch variables", len(self.switch))
-        self.backlog = get_demand_backlog_variables(self.model, self.data.cust_prods, self.weekly_states,
-                                                    self.yield_states, 'backlog')
+        self.backlog = get_demand_backlog_variables(self.model, self.data.cust_prods,
+                                                    self.weekly_states, 'backlog')
         logger.info("Read %d backlog variables", len(self.backlog))
         
         self.model_update()
@@ -325,7 +312,6 @@ class SCPOptimizer(object):
                                                                  self.ut, self.ot, self.line,
                                                                  self.data.pcap, 'pcap')
         self.quality_hold_constraints = get_quality_hold_constraints(self.model, self.data.yields,
-                                                                     self.yield_states,
                                                                      self.to_produce, self.q_hold, 'qhold')
         self.undertime_constraints = get_ot_ut_constraints(self.model, self.ut, self.line,
                                                            self.data.ucap, 'ucap')
@@ -361,37 +347,37 @@ class SCPOptimizer(object):
         self.model.update()
     
     def optimize_objective(self):
-        inv_cost = grb.quicksum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.icost[n,k] * var
-                                for (n,k,t,w,v), var in self.inv.iteritems())
+        inv_cost = grb.quicksum(self.data.p_state[t,w] * self.data.icost[n,k] * var
+                                for (n,k,t,w), var in self.inv.iteritems())
         fixed_cost = grb.quicksum(self.data.fcost[n] * var for (n,t), var in self.line.iteritems())
         cap_switch_cost = grb.quicksum(self.data.wcost[n] * var for (n,t), var in self.switch.iteritems())
-        ut_cost = grb.quicksum(self.data.p_demand[w] * self.data.ucost[n] * var
+        ut_cost = grb.quicksum(self.data.p_state[t,w] * self.data.ucost[n] * var
                                for (n,t,w), var in self.ut.iteritems())
-        ot_cost = grb.quicksum(self.data.p_demand[w] * self.data.ocost[n] * var
+        ot_cost = grb.quicksum(self.data.p_state[t,w] * self.data.ocost[n] * var
                                for (n,t,w), var in self.ot.iteritems())
-        tran_cost = grb.quicksum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.tcost[i,j,k,m] * var
-                                 for (i,j,k,m,t,w,v), var in self.to_ship.iteritems())
-        pen_cost = grb.quicksum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.pcost[n,k] * var
-                                for (n,k,t,w,v), var in self.backlog.iteritems())
+        tran_cost = grb.quicksum(self.data.p_state[t,w] * self.data.tcost[i,j,k,m] * var
+                                 for (i,j,k,m,t,w), var in self.to_ship.iteritems())
+        pen_cost = grb.quicksum(self.data.p_state[t,w] * self.data.pcost[n,k] * var
+                                for (n,k,t,w), var in self.backlog.iteritems())
         prod_cost = fixed_cost + ut_cost + ot_cost + cap_switch_cost
         obj = inv_cost + prod_cost + tran_cost + pen_cost
         self.optimize('min_backlog', objs=obj)
-        print 'inv_cost:', sum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.icost[n,k] * var.X
-                               for (n,k,t,w,v), var in self.inv.iteritems())
+        print 'inv_cost:', sum(self.data.p_state[t,w] * self.data.icost[n,k] * var.X
+                               for (n,k,t,w), var in self.inv.iteritems())
         print 'fixed_cost:', sum(self.data.fcost[n] * var.X for (n,t), var in self.line.iteritems())
         print 'cap_switch_cost:', sum(self.data.wcost[n] * var.X for (n,t), var in self.switch.iteritems())
-        print 'ut_cost:', sum(self.data.p_demand[w] * self.data.ucost[n] * var.X
+        print 'ut_cost:', sum(self.data.p_state[t,w] * self.data.ucost[n] * var.X
                               for (n,t,w), var in self.ut.iteritems())
-        print 'ot_cost:', sum(self.data.p_demand[w] * self.data.ocost[n] * var.X
+        print 'ot_cost:', sum(self.data.p_state[t,w] * self.data.ocost[n] * var.X
                               for (n,t,w), var in self.ot.iteritems())
-        print 'tran_cost:',sum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.tcost[i,j,k,m] * var.X
-                               for (i,j,k,m,t,w,v), var in self.to_ship.iteritems())
-        print 'pen_cost:', sum(self.data.p_demand[w] * self.data.p_yield[v] * self.data.pcost[n,k] * var.X
-                               for (n,k,t,w,v), var in self.backlog.iteritems())
+        print 'tran_cost:',sum(self.data.p_state[t,w] * self.data.tcost[i,j,k,m] * var.X
+                               for (i,j,k,m,t,w), var in self.to_ship.iteritems())
+        print 'pen_cost:', sum(self.data.p_state[t,w] * self.data.pcost[n,k] * var.X
+                               for (n,k,t,w), var in self.backlog.iteritems())
         print 'obj:', self.model.ObjVal
         # for name, value in zip(self.model.getAttr('VarName', list(self.to_produce)), self.model.getAttr('X', list(self.to_produce))):
         #     print name, value
-        self.output_to_excel()
+        # self.output_to_excel()
     
 
     def optimize(self, name, objs = None, sense = GRB.MINIMIZE, mip_start = None):

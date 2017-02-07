@@ -166,6 +166,8 @@ def get_inferred_type(name):
         return float
     elif name.endswith("factor"):
         return float
+    elif name.endswith("size"):
+        return int
     return str
 
 def get_truthiness(x):
