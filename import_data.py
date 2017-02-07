@@ -41,10 +41,10 @@ class FrameImporter(object):
                     df_columns = df.columns
                     tb_columns = inspect(cls).columns.keys()
                     columns = [c for c in df_columns if c in tb_columns]
-                    print df_columns
-                    print tb_columns
-                    print columns
-                    print df[columns]
+                    # print df_columns
+                    # print tb_columns
+                    # print columns
+                    # print df[columns]
                     
                     objects = [cls(**{name: row[name] for name in columns if not pd.isnull(row[name])})
                                for idx, row in df.iterrows()]

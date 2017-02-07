@@ -1,7 +1,7 @@
 from collections import defaultdict
 from operator import attrgetter
 from pandas import Series, DataFrame
-from numpy import unique
+import numpy as np
 import logging
 
 logging.basicConfig(level=logging.INFO, format="%(relativeCreated)5d:%(levelname)-5s:%(name)-8s:%(message)s")
@@ -40,7 +40,7 @@ class ProductionData(object):
         logger.info("Read %d weekly_receives", len(self.start_to_rec))
 
         self.site_prod_produces = [(map.site, map.prod) for map in optimization_run.site_prod_produces]
-        self.sites = list(unique([map.site for map in optimization_run.site_prod_produces]))
+        self.sites = list(np.unique([map.site for map in optimization_run.site_prod_produces]))
         logger.info("Read %d site_prod_produces", len(self.site_prod_produces))
 
         self.site_prod_invs = [(map.site, map.prod) for map in optimization_run.site_prod_invs]
@@ -49,17 +49,19 @@ class ProductionData(object):
         logger.info("Read %d site_prod_invs", len(self.site_prod_invs))
 
         self.cust_prods = [(map.cust, map.prod) for map in optimization_run.cust_prods]
-        self.customers = list(unique([map.cust for map in optimization_run.cust_prods]))
+        self.customers = list(np.unique([map.cust for map in optimization_run.cust_prods]))
         self.start_backlog = {(map.cust, map.prod): map.start_backlog for map in optimization_run.cust_prods}
         self.pcost = {(map.cust, map.prod): map.pcost for map in optimization_run.cust_prods}
         logger.info("Read %d cust_prods", len(self.cust_prods))
 
         self.weekly_demands = optimization_run.weekly_demands
-        self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week): d.quantity for d in self.weekly_demands}
+        # self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week): d.quantity for d in self.weekly_demands}
+        self.demands = self.get_random_demands(self.weekly_demands)
         logger.info("Read %d weekly_demands", len(self.demands))
         
         self.weekly_yields = optimization_run.weekly_yields
-        self.yields = {(y.site, y.week): y.quantity for y in self.weekly_yields}
+        # self.yields = {(y.site, y.week): y.quantity for y in self.weekly_yields}
+        self.yields = self.get_random_yields(self.sites, range(self.num_weeks))
         logger.info("Read %d weekly_yields", len(self.yields))
 
         self.site_capacities = optimization_run.site_capacities
@@ -79,15 +81,16 @@ class ProductionData(object):
         self.inv_at_site = {n: [map.prod for map in n.stored_prods] for n in self.nodes}
         self.sites_produce_prod = {k: [map.site for map in k.produced_in_sites] for k in self.products}
         self.sites_store_prod = {k: [map.site for map in k.stored_in_sites] for k in self.products}
-        
-        
-        print self.products
-        print self.nodes
-        print self.prod_inputs
-        print self.prod_outputs
-        print self.produced_at_site
-        print self.inv_at_site
-        print self.sites_produce_prod
-        print self.sites_store_prod
-        print self.pcost
-        print self.fcost
+
+    def get_random_demands(self, weekly_demands):
+        demands = {}
+        for d in self.weekly_demands:
+            demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = np.random.normal(d.quantity, 0.1*d.quantity)
+        return demands
+
+    def get_random_yields(self, sites, weeks):
+        yields = {}
+        for n in sites:
+            for t in weeks:
+                yields[n,t] = np.random.uniform(0.9,1)
+        return yields

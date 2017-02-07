@@ -63,8 +63,8 @@ def get_production_time_variables(model, sites, weeks, prefix, lb=0):
                           for n in sites
                           for t in weeks})
 
-def get_line_variables(model, sites, weeks, prefix):
-    return Series({(n,t): model.addVar(ub=5.0, vtype=GRB.INTEGER, name=get_name(prefix,n,t))
+def get_line_variables(model, sites, weeks, prefix, lb=0):
+    return Series({(n,t): model.addVar(ub=5.0, lb=lb, name=get_name(prefix,n,t))
                           for n in sites
                           for t in weeks})
 
@@ -281,12 +281,12 @@ class SCPOptimizer(object):
                                            
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
         
+        # for (n,t), var in self.line.iteritems():
+            # if n.type == 'supplier':
+                # var.UB = 1
+        
         for (n,t), var in self.line.iteritems():
-            if n.type == 'supplier':
-                # fix_var(var, 1)
-                var.UB = 1
-            # elif t > 0 and t < (self.data.num_weeks - 1):
-            #     var.LB = 1
+            fix_var(var, 1)
         
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,

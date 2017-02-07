@@ -21,7 +21,7 @@ def run_optimizer(run_id=None):
     optimization_run = session.query(dm.OptimizationRun).get(run_id)
     if optimization_run is None:
         raise RuntimeError("cannot find run_id %d in database" % (run_id))
-
+        
     run_optimizer_from_object(optimization_run, session)
 
 
@@ -30,8 +30,8 @@ def run_optimizer_from_object(optimization_run, session):
     logger.info("created production data object")
     try:
         logger.info("creating optimizer object")
-        optimizer = SCPOptimizer(data)
-        optimizer.optimize_objective()
+        # optimizer = SCPOptimizer(data)
+        # optimizer.optimize_objective()
     except UnexpectedInfeasibleModel:
         raise
 
