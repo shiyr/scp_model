@@ -274,7 +274,8 @@ class SCPOptimizer(object):
                                                  for n in self.data.sites
                                                  for t in self.weeks})
         
-        self.to_consume = Series({(n,p,t): grb.quicksum(self.to_produce[n,g.output,t] for g in p.outputs)
+        self.to_consume = Series({(n,p,t): grb.quicksum(self.to_produce[n,g.output,t]
+                                           for g in p.outputs if (n,g.output) in self.data.site_prod_produces)
                                            for p in self.data.products if p.type == 'part'
                                            for n in self.data.nodes if n.type == 'manufacturer'
                                            for t in self.weeks})
@@ -334,17 +335,25 @@ class SCPOptimizer(object):
         cap_switch_cost = grb.quicksum(self.data.wcost[n] * var for (n,t), var in self.switch.iteritems())
         obj = inv_cost + prod_cost + tran_cost + pen_cost + cap_switch_cost
         self.optimize('min_backlog', objs=obj)
-        print 'inv_cost:', sum(self.data.icost[n,k] * var.X for (n,k,t), var in self.inv.iteritems())
-        print 'fixed_cost:', sum(self.data.fcost[n] * var.X for (n,t), var in self.line.iteritems())
-        print 'ut_cost:', sum(self.data.ucost[n] * var.X for (n,t), var in self.ut.iteritems())
-        print 'ot_cost:', sum(self.data.ocost[n] * var.X for (n,t), var in self.ot.iteritems())
-        print 'tran_cost:',sum(self.data.tcost[i,j,k,m] * var.X for (i,j,k,m,t), var in self.to_ship.iteritems())
-        print 'pen_cost:', sum(self.data.pcost[n,k] * var.X for (n,k,t), var in self.backlog.iteritems())
-        print 'cap_switch_cost:', sum(self.data.wcost[n] * var.X for (n,t), var in self.switch.iteritems())
+        inv_val = sum(self.data.icost[n,k] * var.X for (n,k,t), var in self.inv.iteritems())
+        fixed_val = sum(self.data.fcost[n] * var.X for (n,t), var in self.line.iteritems())
+        ut_val = sum(self.data.ucost[n] * var.X for (n,t), var in self.ut.iteritems())
+        ot_val = sum(self.data.ocost[n] * var.X for (n,t), var in self.ot.iteritems())
+        tran_val = sum(self.data.tcost[i,j,k,m] * var.X for (i,j,k,m,t), var in self.to_ship.iteritems())
+        pen_val = sum(self.data.pcost[n,k] * var.X for (n,k,t), var in self.backlog.iteritems())
+        switch_val = sum(self.data.wcost[n] * var.X for (n,t), var in self.switch.iteritems())
+        print 'inv_cost:', inv_val
+        print 'fixed_cost:', fixed_val
+        print 'ut_cost:', ut_val
+        print 'ot_cost:', ot_val
+        print 'tran_cost:', tran_val
+        print 'pen_cost:', pen_val
+        print 'cap_switch_cost:', switch_val
         print 'obj:', self.model.ObjVal
         # for name, value in zip(self.model.getAttr('VarName', list(self.to_produce)), self.model.getAttr('X', list(self.to_produce))):
         #     print name, value
-        self.output_to_excel()
+        # self.output_to_excel()
+        return [self.model.ObjVal, pen_val, inv_val, tran_val, ut_val, ot_val, fixed_val, switch_val]
     
 
     def optimize(self, name, objs = None, sense = GRB.MINIMIZE, mip_start = None):
@@ -397,10 +406,10 @@ class SCPOptimizer(object):
         if self.has_feasible_solution:
             elements = (name, self.model.ObjVal, status_name(self.model))
             logger.info("objective value for %s = %10.2f, status = %s", *elements)
-            if not self.model.isMIP:
-                self.log_nonzero_duals(name)
-                self.save_fairshare_lb_duals(name)
-                self.save_objective_constraint_duals(name)
+            # if not self.model.isMIP:
+            #     self.log_nonzero_duals(name)
+            #     self.save_fairshare_lb_duals(name)
+            #     self.save_objective_constraint_duals(name)
         else:
             logger.critical("optimizer %s did not find a feasible solution! status = %s",
                             name, status_name(self.model))

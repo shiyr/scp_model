@@ -56,12 +56,12 @@ class ProductionData(object):
 
         self.weekly_demands = optimization_run.weekly_demands
         # self.demands = {(d.cust_prod.cust, d.cust_prod.prod, d.week): d.quantity for d in self.weekly_demands}
-        self.demands = self.get_random_demands(self.weekly_demands)
+        self.demands = {}
         logger.info("Read %d weekly_demands", len(self.demands))
         
         self.weekly_yields = optimization_run.weekly_yields
         # self.yields = {(y.site, y.week): y.quantity for y in self.weekly_yields}
-        self.yields = self.get_random_yields(self.sites, range(self.num_weeks))
+        self.yields = {}
         logger.info("Read %d weekly_yields", len(self.yields))
 
         self.site_capacities = optimization_run.site_capacities
@@ -82,15 +82,13 @@ class ProductionData(object):
         self.sites_produce_prod = {k: [map.site for map in k.produced_in_sites] for k in self.products}
         self.sites_store_prod = {k: [map.site for map in k.stored_in_sites] for k in self.products}
 
-    def get_random_demands(self, weekly_demands):
-        demands = {}
+    def get_random_demands(self):
+        self.demands = {}
         for d in self.weekly_demands:
-            demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = np.random.normal(d.quantity, 0.1*d.quantity)
-        return demands
+            self.demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = np.random.normal(d.quantity, 0.1*d.quantity)
 
-    def get_random_yields(self, sites, weeks):
-        yields = {}
-        for n in sites:
-            for t in weeks:
-                yields[n,t] = np.random.uniform(0.9,1)
-        return yields
+    def get_random_yields(self):
+        self.yields = {}
+        for n in self.sites:
+            for t in range(self.num_weeks):
+                self.yields[n,t] = np.random.uniform(0.9,1)
