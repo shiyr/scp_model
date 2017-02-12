@@ -12,7 +12,6 @@ logger = logging.getLogger("production_data")
 class ProductionData(object):
     def __init__(self, optimization_run):
         self.num_weeks = optimization_run.num_weeks
-        # self.yield_states = optimization_run.yield_states
         self.parameters = {name: p.value for name, p in optimization_run.parameters.iteritems()}
         optimization_run.log_parameters()
         logger.info("Read parameters table")
@@ -104,7 +103,7 @@ class ProductionData(object):
         for n in sites:
             for t in range(num_weeks):
                 if t < s1_weeks:
-                    yields[n,t,0] = np.random.uniform(0.9,1)
+                    yields[n,t,0] = 1
                 else:
                     for w in range(1, size+1):
                         yields[n,t,w] = np.random.uniform(0.9,1)
