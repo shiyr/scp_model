@@ -274,7 +274,8 @@ class SCPOptimizer(object):
                                                  for n in self.data.sites
                                                  for t in self.weeks})
         
-        self.to_consume = Series({(n,p,t): grb.quicksum(self.to_produce[n,g.output,t] for g in p.outputs)
+        self.to_consume = Series({(n,p,t): grb.quicksum(self.to_produce[n,g.output,t]
+                                           for g in p.outputs if (n,g.output) in self.data.site_prod_produces)
                                            for p in self.data.products if p.type == 'part'
                                            for n in self.data.nodes if n.type == 'manufacturer'
                                            for t in self.weeks})
