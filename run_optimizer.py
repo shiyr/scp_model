@@ -25,28 +25,18 @@ def run_optimizer(run_id=None, filename=None):
     data = ProductionData(optimization_run)
     logger.info("created production data object")
 
-    ref_inv = pd.read_csv(filename+'_inv.csv')
-    ref_inv = ref_inv[ref_inv['week'] == 2]
-    ref_db = pd.read_csv(filename+'_db.csv')
-    ref_db = ref_db[ref_db['week'] == 2]
-    ref_rec = pd.read_csv(filename+'_rec.csv')
-    ref_rec = ref_rec[ref_rec['week'] <= 2]
-    for (n,k), val in data.start_inv.iteritems():
-        qty = ref_inv[(ref_inv['site'] == n.key_name) & (ref_inv['prod'] == k.key_name)].iloc[0].quantity
-        data.start_inv[n,k] = qty
-    for (n,k), val in data.start_backlog.iteritems():
-        qty = ref_db[(ref_db['cust'] == n.key_name) & (ref_db['prod'] == k.key_name)].iloc[0].quantity
-        data.start_backlog[n,k] = qty
-    for (i,j,k,m,t), val in data.start_to_rec.iteritems():
-        lt = data.lead_times[i,j,m]
-        s = t + 3 - lt
-        if s < 3 and s >= 0:
-            qty = ref_rec[(ref_rec['origin'] == i.key_name) & (ref_rec['destination'] == j.key_name) & (ref_rec['prod'] == k.key_name) & (ref_rec['mode'] == m.key_name) & (ref_rec['week'] == s)].iloc[0].quantity
-            data.start_to_rec[i,j,k,m,t] = qty
-    logger.info("finished loading stage 1 data")
+    file = pd.ExcelFile(filename)
+    ref_produce = pd.read_excel(filename, 'to_produce')
+    ref_ship = pd.read_excel(filename, 'to_ship')
+    ref_inv = pd.read_excel(filename, 'inv')
+    ref_db = pd.read_excel(filename, 'backlog')
+    ref_ot = pd.read_excel(filename, 'ot')
+    ref_ut = pd.read_excel(filename, 'ut')
+    data.get_phase_one_results(ref_produce, ref_ship, ref_inv, ref_db, ref_ot, ref_ut)
+    logger.info("finished loading phase 1 data")
 
     results = pd.DataFrame(columns=['objs', 'pens', 'invs', 'trans', 'uts', 'ots', 'fixs', 'caps'])
-    for i in range(1000):
+    for i in range(10):
         data.get_random_demands()
         data.get_random_yields()
         results.loc[i] = run_optimizer_from_object(data)
@@ -59,6 +49,8 @@ def run_optimizer_from_object(data):
     try:
         logger.info("creating optimizer object")
         optimizer = SCPOptimizer(data)
+        optimizer.fix_phase_one_variables(data)
+        logger.info("finished loading phase 1 data")
         return optimizer.optimize_objective()
     except UnexpectedInfeasibleModel:
         raise

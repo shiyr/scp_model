@@ -283,11 +283,16 @@ class SCPOptimizer(object):
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
         
         # for (n,t), var in self.line.iteritems():
-            # if n.type == 'supplier':
-                # var.UB = 1
+        #     if n.type == 'supplier':
+        #         var.UB = 1
         
         for (n,t), var in self.line.iteritems():
-            fix_var(var, 1)
+            if n.type == 'supplier':
+                fix_var(var, 1)
+            elif t == 0:
+                fix_var(var, 0)
+            else:
+                fix_var(var, self.data.lcap[n])
         
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
@@ -325,6 +330,38 @@ class SCPOptimizer(object):
     def model_update(self):
         self.model.update()
     
+    def fix_phase_one_variables(self, data):
+        for (n,k,t), val in data.ref_produce.iteritems():
+            try:
+                fix_var(self.to_produce[n,k,t], val)
+            except KeyError:
+                pass
+        for (i,j,k,m,t), val in data.ref_ship.iteritems():
+            try:
+                fix_var(self.to_ship[i,j,k,m,t], val)
+            except KeyError:
+                pass
+        # for (n,k,t), val in data.ref_inv.iteritems():
+        #     try:
+        #         fix_var(self.inv[n,k,t], val)
+        #     except KeyError:
+        #         pass
+        # for (n,k,t), val in data.ref_db.iteritems():
+        #     try:
+        #         fix_var(self.backlog[n,k,t], val)
+        #     except KeyError:
+        #         pass
+        # for (n,t), val in data.ref_ot.iteritems():
+        #     try:
+        #         fix_var(self.ot[n,t], val)
+        #     except KeyError:
+        #         pass
+        # for (n,t), val in data.ref_ut.iteritems():
+        #     try:
+        #         fix_var(self.ut[n,t], val)
+        #     except KeyError:
+        #         pass
+
     def optimize_objective(self):
         inv_cost = grb.quicksum(self.data.icost[n,k] * var for (n,k,t), var in self.inv.iteritems())
         prod_cost = grb.quicksum(self.data.fcost[n] * var for (n,t), var in self.line.iteritems()) + \

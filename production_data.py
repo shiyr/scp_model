@@ -12,9 +12,10 @@ class ProductionData(object):
     def __init__(self, optimization_run):
         self.optimization_run = optimization_run
         self.num_weeks = self.optimization_run.num_weeks
-        self.parameters = {p.name: p.value for p in self.optimization_run.parameters}
+        self.parameters = {name: p.value for name, p in self.optimization_run.parameters.iteritems()}
         self.optimization_run.log_parameters()
         logger.info("Read parameters table")
+        self.s1_weeks = int(self.parameters.get('stage_1_size', 1))
 
         self.products = optimization_run.products
         logger.info("Read %d products", len(self.products))
@@ -68,6 +69,7 @@ class ProductionData(object):
         self.pcap = {s.site: s.pcap for s in optimization_run.site_capacities}
         self.ucap = {s.site: s.ucap for s in optimization_run.site_capacities}
         self.ocap = {s.site: s.ocap for s in optimization_run.site_capacities}
+        self.lcap = {s.site: s.lcap for s in optimization_run.site_capacities}
         self.icap = {s.site: s.icap for s in optimization_run.site_capacities}
         self.fcost = {s.site: s.fcost for s in optimization_run.site_capacities}
         self.ucost = {s.site: s.ucost for s in optimization_run.site_capacities}
@@ -85,10 +87,41 @@ class ProductionData(object):
     def get_random_demands(self):
         self.demands = {}
         for d in self.weekly_demands:
-            self.demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = np.random.normal(d.quantity, 0.1*d.quantity)
+            if d.week < self.s1_weeks:
+                self.demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = d.quantity
+            else:
+                self.demands[d.cust_prod.cust,d.cust_prod.prod,d.week] = np.random.normal(d.quantity, 0.1*d.quantity)
 
     def get_random_yields(self):
         self.yields = {}
         for n in self.sites:
             for t in range(self.num_weeks):
-                self.yields[n,t] = np.random.uniform(0.9,1)
+                if t < self.s1_weeks:
+                    self.yields[n,t] = 1
+                else:
+                    self.yields[n,t] = np.random.uniform(0.9,1)
+
+    def get_phase_one_results(self, ref_produce, ref_ship, ref_inv, ref_db, ref_ot, ref_ut):
+        self.ref_produce = {(get_obj_from_name(self.nodes, r.site),
+                             get_obj_from_name(self.products, r.pdt), r.week): r.quantity
+                            for i, r in ref_produce.iterrows()}
+        self.ref_ship = {(get_obj_from_name(self.nodes, r.origin),
+                          get_obj_from_name(self.nodes, r.destination),
+                          get_obj_from_name(self.products, r.pdt),
+                          get_obj_from_name(self.modes, r.mde), r.week): r.quantity
+                         for i, r in ref_ship.iterrows()}
+        self.ref_inv = {(get_obj_from_name(self.nodes, r.site),
+                         get_obj_from_name(self.products, r.pdt), r.week): r.quantity
+                        for i, r in ref_inv.iterrows()}
+        self.ref_db = {(get_obj_from_name(self.nodes, r.cust),
+                        get_obj_from_name(self.products, r.pdt), r.week): r.quantity
+                       for i, r in ref_db.iterrows()}
+        self.ref_ot = {(get_obj_from_name(self.nodes, r.site), r.week): r.quantity for i, r in ref_ot.iterrows()}
+        self.ref_ut = {(get_obj_from_name(self.nodes, r.site), r.week): r.quantity for i, r in ref_ut.iterrows()}
+
+
+def get_obj_from_name(objs, name):
+    for obj in objs:
+        if obj.key_name == name:
+            return obj
+    return None
