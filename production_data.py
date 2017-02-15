@@ -58,14 +58,23 @@ class ProductionData(object):
 
         self.demands = self.get_random_demands(optimization_run.weekly_demands, self.sample_size)
         logger.info("Read %d weekly_demands", len(self.demands))
+        self.stage_1_demands = {(n,k,t): val for (n,k,t,w), val in self.demands.iteritems() if w == 0}
+        logger.info("Read %d stage_1_demands", len(self.stage_1_demands))
+        self.stage_2_demands = defaultdict(dict)
+        for (n,k,t,w), val in self.demands.iteritems():
+            if w > 0:
+                self.stage_2_demands[w][n,k,t] = val
+        logger.info("Read %d stage_2_demands", len(self.stage_2_demands))
+        
         self.yields = self.get_random_yields(self.sites, self.num_weeks, self.s1_weeks, self.sample_size)
         logger.info("Read %d weekly_yields", len(self.yields))
-
-        self.weekly_states = self.get_weekly_states(self.num_weeks, self.s1_weeks, self.sample_size)
-        self.pres, self.sucs = self.get_pres_and_sucs(self.weekly_states, self.s1_weeks, self.sample_size)
-        logger.info("Read %d weekly_states", len(self.weekly_states))
-        self.p_state = self.get_state_probabilities(self.weekly_states, self.sample_size)
-        logger.info("Read %d p_state", len(self.p_state))
+        self.stage_1_yields = {(n,t): val for (n,t,w), val in self.yields.iteritems() if w == 0}
+        logger.info("Read %d stage_1_yields", len(self.stage_1_yields))
+        self.stage_2_yields = defaultdict(dict)
+        for (n,t,w), val in self.yields.iteritems():
+            if w > 0:
+                self.stage_2_yields[w][n,t] = val
+        logger.info("Read %d stage_2_yields", len(self.stage_2_yields))
 
         self.site_capacities = optimization_run.site_capacities
         self.pcap = {s.site: s.pcap for s in optimization_run.site_capacities}

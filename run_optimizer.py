@@ -1,10 +1,11 @@
+from __future__ import division
 import sys
 import logging
 import gc
 from pandas import ExcelWriter, DataFrame
 import data_model as dm
 from production_data import ProductionData
-from scp_optimizer import SCPOptimizer
+from scp_optimizer import MasterProblem, SubProblem
 from utils import logged
 from db_utils import get_session, get_latest_optimization_id
 from grb_utils import UnexpectedInfeasibleModel
@@ -28,10 +29,38 @@ def run_optimizer(run_id=None):
 def run_optimizer_from_object(optimization_run, session):
     data = ProductionData(optimization_run)
     logger.info("created production data object")
+    
+    sample_size = data.sample_size
+    epsilon = 1e-5
+    max_iterations = 10
+    
     try:
         logger.info("creating optimizer object")
-        optimizer = SCPOptimizer(data)
-        optimizer.optimize_objective()
+        optimizer = MasterProblem(data)
+        mp_obj, mp_1_obj, receives, invs, backlogs = optimizer.optimize_objective()
+        
+        sub_optimizer = {}
+        for w in range(1, sample_size+1):
+            sub_optimizer[w] = SubProblem(data, w, receives, invs, backlogs)
+    
+        r = 0
+        sub_obj = {}
+        while r < max_iterations:
+            for w in range(1, sample_size+1):
+                sub_optimizer[w].update_model_parameters(receives, invs, backlogs)
+                sub_obj[w], pi_flow, pi_rec, pi_db = sub_optimizer[w].optimize_objective()
+                if optimizer.mp_cut[w] < sub_obj:
+                    cut_val = sub_optimizer[w].add_cut_to_master_problem()
+                    optimizer.add_cut_to_master_problem(w, r, pi_flow, pi_rec, pi_db, cut_val)
+        
+            mp_obj_est = mp_1_obj + sum(sub_obj.values()) / sample_size
+            if mp_obj_est - mp_obj <= epsilon:
+                break
+            
+            r += 1
+            mp_obj, mp_1_obj, receives, invs, backlogs = optimizer.optimize_objective()
+
+
     except UnexpectedInfeasibleModel:
         raise
 
