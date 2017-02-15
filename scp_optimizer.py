@@ -1,3 +1,4 @@
+from __future__ import division
 import os
 import logging
 import time
@@ -333,6 +334,7 @@ class MasterProblem(object):
         self.model_update()
     
     def optimize_objective(self):
+        self.model.write('mp.lp')
         inv_cost = grb.quicksum(self.data.icost[n,k] * var for (n,k,t), var in self.inv.iteritems())
         fixed_cost = grb.quicksum(self.data.fcost[n] * var for (n,t), var in self.line.iteritems())
         cap_switch_cost = grb.quicksum(self.data.wcost[n] * var for (n,t), var in self.switch.iteritems())
@@ -341,7 +343,8 @@ class MasterProblem(object):
         tran_cost = grb.quicksum(self.data.tcost[i,j,k,m] * var for (i,j,k,m,t), var in self.to_ship.iteritems())
         pen_cost = grb.quicksum(self.data.pcost[n,k] * var for (n,k,t), var in self.backlog.iteritems())
         prod_cost = fixed_cost + ut_cost + ot_cost + cap_switch_cost
-        obj = inv_cost + prod_cost + tran_cost + pen_cost
+        cut_cost = grb.quicksum(self.mp_cut) / self.data.sample_size
+        obj = inv_cost + prod_cost + tran_cost + pen_cost + cut_cost
         self.optimize('min_master_problem', objs=obj)
         inv_val = sum(self.data.icost[n,k] * var.X for (n,k,t), var in self.inv.iteritems())
         fixed_val = sum(self.data.fcost[n] * var.X for (n,t), var in self.line.iteritems())
@@ -351,6 +354,7 @@ class MasterProblem(object):
         tran_val = sum(self.data.tcost[i,j,k,m] * var.X for (i,j,k,m,t), var in self.to_ship.iteritems())
         pen_val = sum(self.data.pcost[n,k] * var.X for (n,k,t), var in self.backlog.iteritems())
         stage_1_val = inv_val + fixed_val + switch_val + ut_val + ot_val + tran_val + pen_val
+        stage_2_val = sum(var.X for w, var in self.mp_cut.iteritems()) / self.data.sample_size
         print 'inv_cost:', inv_val
         print 'fixed_cost:', fixed_val
         print 'cap_switch_cost:', switch_val
@@ -359,10 +363,24 @@ class MasterProblem(object):
         print 'tran_cost:', tran_val
         print 'pen_cost:', pen_val
         print 'stage_1_val:', stage_1_val
+        print 'stage_2_val:', stage_2_val
         print 'obj:', self.model.ObjVal
         # for name, value in zip(self.model.getAttr('VarName', list(self.to_produce)), self.model.getAttr('X', list(self.to_produce))):
         #     print name, value
         # self.output_to_excel()
+        
+        for (n,k,t), var in self.to_produce.iteritems():
+            if var.X > 0:
+                print 'to_produce', n,k,t, var.X
+        for (n,k,t), var in self.inv.iteritems():
+            if var.X > 0:
+                print 'inv', n,k,t, var.X
+        for (i,j,k,m,t), var in self.to_ship.iteritems():
+            if var.X > 0:
+                print 'to_ship', i,j,k,m,t, var.X
+        for k, var in self.ship_to_rec.iteritems():
+            if var.X > 0:
+                print 'ship_to_rec', k, var.X 
     
         receives = defaultdict(int)
         for (i,j,k,m,t,s), var in self.ship_to_rec.iteritems():

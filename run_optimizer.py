@@ -46,6 +46,7 @@ def run_optimizer_from_object(optimization_run, session):
         r = 0
         sub_obj = {}
         while r < max_iterations:
+            print '################ iteration', r, '##################'
             for w in range(1, sample_size+1):
                 sub_optimizer[w].update_model_parameters(receives, invs, backlogs)
                 sub_obj[w], pi_flow, pi_rec, pi_db = sub_optimizer[w].optimize_objective()
