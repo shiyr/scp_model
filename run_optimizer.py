@@ -32,7 +32,7 @@ def run_optimizer_from_object(optimization_run, session):
     
     sample_size = data.sample_size
     epsilon = 1e-5
-    max_iterations = 10
+    max_iterations = 1
     
     try:
         logger.info("creating optimizer object")
@@ -55,7 +55,13 @@ def run_optimizer_from_object(optimization_run, session):
                     optimizer.add_cut_to_master_problem(w, r, pi_flow, pi_rec, pi_db, cut_val)
         
             mp_obj_est = mp_1_obj + sum(sub_obj.values()) / sample_size
+            print '##################################################################'
+            print 'MP objective upper bound estimate in iteration', r, 'is', mp_obj_est
+            print 'MP objective lower bound estimate in iteration', r, 'is', mp_obj
+            print '##################################################################'
             if mp_obj_est - mp_obj <= epsilon:
+                print 'mp_obj_est =', mp_obj_est, 'mp_obj =', mp_obj, 'delta =', mp_obj_est - mp_obj
+                print 'Within', epsilon, 'tolerance, break.'
                 break
             
             r += 1

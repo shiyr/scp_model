@@ -188,9 +188,9 @@ def get_ship_to_rec_constraints(model, weeks, lt, to_ship, ship_to_rec, prefix):
     constrs = {}
     for (i,j,k,m,s), var in to_ship.iteritems():
         t = s + lt[i,j,m]
-        if t <= max(weeks):
-            constrs[i,j,k,m,s] = model.addConstr(var == ship_to_rec[i,j,k,m,t,s],
-                                                 name=get_name(prefix,i,j,k,m,s))
+        # if t <= max(weeks):
+        constrs[i,j,k,m,s] = model.addConstr(var == ship_to_rec[i,j,k,m,t,s],
+                                             name=get_name(prefix,i,j,k,m,s))
     return Series(constrs)
 
 def get_demand_constraints(model, weeks, demand, start_backlog, flow_in, backlog, prefix):
@@ -267,13 +267,15 @@ class MasterProblem(object):
 
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
 
+        constrs = {}
         for (n,t), var in self.line.iteritems():
             if n.type == 'supplier':
-                fix_var(var, 1)
+                constrs[n,t] = self.model.addConstr(var == 1, name=get_name('line',n,t))
             elif t == 0:
-                fix_var(var, 0)
+                constrs[n,t] = self.model.addConstr(var == 0, name=get_name('line',n,t))
             else:
-                fix_var(var, self.data.lcap[n])
+                constrs[n,t] = self.model.addConstr(var == self.data.lcap[n], name=get_name('line',n,t))
+        self.fix_line_constraints = Series(constrs)
 
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
@@ -294,7 +296,7 @@ class MasterProblem(object):
                                                             self.to_receive, self.ship_to_rec, 'total_rec')
         self.trans_cap_constraints = get_trans_cap_constraints(self.model, self.data.tcap,
                                                                self.to_ship, 'tcap')
-        self.inv_cap_constraints = get_inv_cap_constraints(self.model, self.data.icap, self.inv, 'icap')
+        # self.inv_cap_constraints = get_inv_cap_constraints(self.model, self.data.icap, self.inv, 'icap')
         self.ship_to_rec_constraints = get_ship_to_rec_constraints(self.model, self.weeks,
                                                                    self.data.lead_times, self.to_ship,
                                                                    self.ship_to_rec, 'ship_to_rec_ctr')
@@ -365,6 +367,21 @@ class MasterProblem(object):
         print 'stage_1_val:', stage_1_val
         print 'stage_2_val:', stage_2_val
         print 'obj:', self.model.ObjVal
+        print '#######################'
+        # for (i,j,k,m,t), var in self.to_ship.iteritems():
+        #     print 'to_ship', i,j,k,m,t, var.X
+        # for (n,k,t), var in self.inv.iteritems():
+        #     if t == max(self.weeks) and var.X > 0:
+        #         print 'inv', n,k,t, var.X
+        # for (n,k,t), var in self.backlog.iteritems():
+        #     if t == max(self.weeks) and var.X > 0:
+        #         print 'db', n,k,t,var.X
+        # for (i,j,k,m,t,s), var in self.ship_to_rec.iteritems():
+        #     if t > max(self.weeks) and var.X > 0:
+        #         print 'rec', i,j,k,m,t,s, var.X
+        for k, var in self.mp_cut.iteritems():
+            print 'mp_cut', k, var.X
+        print '#######################'
         # for name, value in zip(self.model.getAttr('VarName', list(self.to_produce)), self.model.getAttr('X', list(self.to_produce))):
         #     print name, value
         # self.output_to_excel()
@@ -380,7 +397,7 @@ class MasterProblem(object):
                 print 'to_ship', i,j,k,m,t, var.X
         for k, var in self.ship_to_rec.iteritems():
             if var.X > 0:
-                print 'ship_to_rec', k, var.X 
+                print 'ship_to_rec', k, var.X
     
         receives = defaultdict(int)
         for (i,j,k,m,t,s), var in self.ship_to_rec.iteritems():
@@ -625,11 +642,22 @@ class SubProblem(object):
 
         self.flow_out, self.flow_in = get_flow_expressions(self.to_ship, self.to_receive)
 
+        # for (n,t), var in self.line.iteritems():
+        #     if n.type == 'supplier':
+        #         fix_var(var, 1)
+        #     else:
+        #         fix_var(var, self.data.lcap[n])
+    
+        constrs = {}
         for (n,t), var in self.line.iteritems():
             if n.type == 'supplier':
-                fix_var(var, 1)
+                constrs[n,t] = self.model.addConstr(var == 1, name=get_name('line',n,t))
+            elif t == 0:
+                constrs[n,t] = self.model.addConstr(var == 0, name=get_name('line',n,t))
             else:
-                fix_var(var, self.data.lcap[n])
+                constrs[n,t] = self.model.addConstr(var == self.data.lcap[n], name=get_name('line',n,t))
+        self.fix_line_constraints = Series(constrs)
+
 
         self.production_constraints = get_production_constraints(self.model, self.to_produce_by_site,
                                                                  self.ut, self.ot, self.line,
@@ -650,7 +678,7 @@ class SubProblem(object):
                                                             self.to_receive, self.ship_to_rec, 'total_rec')
         self.trans_cap_constraints = get_trans_cap_constraints(self.model, self.data.tcap,
                                                                self.to_ship, 'tcap')
-        self.inv_cap_constraints = get_inv_cap_constraints(self.model, self.data.icap, self.inv, 'icap')
+        # self.inv_cap_constraints = get_inv_cap_constraints(self.model, self.data.icap, self.inv, 'icap')
         self.ship_to_rec_constraints = get_ship_to_rec_constraints(self.model, self.weeks,
                                                                    self.data.lead_times, self.to_ship,
                                                                    self.ship_to_rec, 'ship_to_rec_ctr')
@@ -692,23 +720,38 @@ class SubProblem(object):
         self.pi_p = {(n,t): constr.Pi for (n,t), constr in self.production_constraints.iteritems()}
         self.pi_ut = {(n,t): constr.Pi for (n,t), constr in self.undertime_constraints.iteritems()}
         self.pi_ot = {(n,t): constr.Pi for (n,t), constr in self.overtime_constraints.iteritems()}
+        self.pi_l = {(n,t): constr.Pi for (n,t), constr in self.fix_line_constraints.iteritems()}
         self.pi_flow = {(n,k,t): constr.Pi
                                  for (n,k,t), constr in self.flow_conservation_constraints.iteritems()}
         self.pi_rec = {(i,j,k,m,t): constr.Pi
                                     for (i,j,k,m,t), constr in self.total_receive_constraints.iteritems()}
         self.pi_t = {(i,j,m,t): constr.Pi for (i,j,m,t), constr in self.trans_cap_constraints.iteritems()}
-        self.pi_inv = {(n,t): constr.Pi for (n,t), constr in self.inv_cap_constraints.iteritems()}
+        # self.pi_inv = {(n,t): constr.Pi for (n,t), constr in self.inv_cap_constraints.iteritems()}
         self.pi_db = {(n,k,t): constr.Pi for (n,k,t), constr in self.demand_constraints.iteritems()}
         
         return self.model.ObjVal, self.pi_flow, self.pi_rec, self.pi_db
 
     def add_cut_to_master_problem(self):
         cut_val = sum(val * self.data.pcap[n] for (n,t), val in self.pi_p.iteritems())
+        print 'to_produce_cut', cut_val
         cut_val += sum(val * self.data.ucap[n] for (n,t), val in self.pi_ut.iteritems())
+        print 'ut_cut', cut_val
         cut_val += sum(val * self.data.ocap[n] for (n,t), val in self.pi_ot.iteritems())
+        print 'ot_cut', cut_val
+        cut_val += sum(val * self.data.lcap[n] for (n,t), val in self.pi_l.iteritems())
+        print 'line_cut', cut_val
         cut_val += sum(val * self.data.tcap[i,j,m] for (i,j,m,t), val in self.pi_t.iteritems())
-        cut_val += sum(val * self.data.icap[n] for (n,t), val in self.pi_inv.iteritems())
+        print 'tran_cut', cut_val
+        # cut_val += sum(val * self.data.icap[n] for (n,t), val in self.pi_inv.iteritems())
         cut_val += sum(val * self.demands[n,k,t] for (n,k,t), val in self.pi_db.iteritems())
+        # cut_val -= sum(val * self.start_inv[n,k] for (n,k,t), val in self.pi_flow.iteritems()
+        #                                          if t == min(self.weeks))
+        # cut_val -= sum(val * self.start_backlog[n,k] for (n,k,t), val in self.pi_db.iteritems()
+        #                                              if t == min(self.weeks))
+        # cut_val += sum(val * self.pi_rec[i,j,k,m,t] for (i,j,k,m,t), val in self.start_to_rec.iteritems())
+        print '#########################'
+        print 'total cut value =', cut_val
+        print '#########################'
         return cut_val
 
     def optimize(self, name, objs = None, sense = GRB.MINIMIZE, mip_start = None):
